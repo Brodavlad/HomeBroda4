@@ -24,6 +24,7 @@ LB_ARN=`aws elbv2 create-load-balancer \
     --security-groups $GROUP_LB_ID \
     --query LoadBalancers[*].LoadBalancerArn --output text`
 
+sleep 15
 # Retrieve VPC IP Address
 VPC_NET=`aws ec2 describe-vpcs --query Vpcs[0].CidrBlock --output text`
 
@@ -38,11 +39,15 @@ GROUP_INC_ID=`aws ec2 create-security-group \
 aws ec2 authorize-security-group-ingress --group-id $GROUP_INC_ID --protocol tcp --port 80 --cidr $VPC_NET
 aws ec2 authorize-security-group-ingress --group-id $GROUP_INC_ID --protocol tcp --port 22 --cidr 0.0.0.0/0
 
+sleep 15
+
 # Create a key pair and output to MyKeyPair.pem
 aws ec2 create-key-pair --key-name KeyBroda --query 'KeyMaterial' --output text > ./KeyBroda.pem
 
 # Modify permissions
 chmod 400 KeyBroda.pem
+
+sleep 30
 
 # Create Instances
 INSTANCE_1_ID=`aws ec2 run-instances \
