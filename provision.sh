@@ -9,7 +9,7 @@ SUBNET_2_ID=`aws ec2 describe-subnets --query 'Subnets[1].SubnetId' --output tex
 
 # Create security group for LoadBalancer
 GROUP_LB_ID=`aws ec2 create-security-group \
-    --group-name SecurityGroupLB \
+    --group-name SecGroupForLB \
     --description "Security group for LB" \
     --vpc-id $VPC_ID \
     --query GroupId --output text`
@@ -19,7 +19,7 @@ aws ec2 authorize-security-group-ingress --group-id $GROUP_LB_ID --protocol tcp 
 
 # Create LoadBalancer
 LB_ARN=`aws elbv2 create-load-balancer \
-    --name my-load-balancer \
+    --name lb-broda \
     --subnets $SUBNET_1_ID $SUBNET_2_ID \
     --security-groups $GROUP_LB_ID \
     --query LoadBalancers[*].LoadBalancerArn --output text`
@@ -29,7 +29,7 @@ VPC_NET=`aws ec2 describe-vpcs --query Vpcs[0].CidrBlock --output text`
 
 # Create security group for Instances
 GROUP_INC_ID=`aws ec2 create-security-group \
-    --group-name SecurityGroupINC \
+    --group-name SecGroupForINC \
     --description "Security group for Instances" \
     --vpc-id $VPC_ID \
     --query GroupId --output text`
@@ -39,31 +39,28 @@ aws ec2 authorize-security-group-ingress --group-id $GROUP_INC_ID --protocol tcp
 aws ec2 authorize-security-group-ingress --group-id $GROUP_INC_ID --protocol tcp --port 22 --cidr 0.0.0.0/0
 
 # Create a key pair and output to MyKeyPair.pem
-aws ec2 create-key-pair --key-name MyKeyPairLB --query 'KeyMaterial' --output text > ./MyKeyPairLB.pem
+aws ec2 create-key-pair --key-name KeyBroda --query 'KeyMaterial' --output text > ./KeyBroda.pem
 
 # Modify permissions
-chmod 400 MyKeyPairLB.pem
-
-# Retrieve IMAGE_ID
-IMAGE_ID=`aws ec2 describe-images --owners 735458214073 --query Images[0].ImageId --output text`
+chmod 400 KeyBroda.pem
 
 # Create Instances
 INSTANCE_1_ID=`aws ec2 run-instances \
-    --image-id $IMAGE_ID \
+    --image-id ami-0b5eea76982371e91 \
     --subnet-id $SUBNET_1_ID \
     --count 1 \
     --instance-type t2.micro \
-    --key-name MyKeyPairLB \
+    --key-name KeyBroda \
     --security-group-ids $GROUP_INC_ID \
     --user-data file://user_script.sh \
     --query Instances[0].InstanceId --output text`
 
 INSTANCE_2_ID=`aws ec2 run-instances \
-    --image-id $IMAGE_ID \
+    --image-id ami-0b5eea76982371e91 \
     --subnet-id $SUBNET_2_ID \
     --count 1 \
     --instance-type t2.micro \
-    --key-name MyKeyPairLB \
+    --key-name KeyBroda \
     --security-group-ids $GROUP_INC_ID \
     --user-data file://user_script.sh \
     --query Instances[0].InstanceId --output text`
