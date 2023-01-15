@@ -1,117 +1,74 @@
 #!/bin/bash
 
-# Retrieve default VPC ID
+## receive default VPC ID
 VPC_ID=`aws ec2 describe-vpcs --query Vpcs[0].VpcId --output text`
 
-# Retrieve default SubNet ID
+## receive default SubNet ID
 SUBNET_1_ID=`aws ec2 describe-subnets --query 'Subnets[0].SubnetId' --output text`
 SUBNET_2_ID=`aws ec2 describe-subnets --query 'Subnets[1].SubnetId' --output text`
 
-# Create security group for LoadBalancer
-GROUP_LB_ID=`aws ec2 create-security-group \
-    --group-name SecGroupForLB \
-    --description "Security group for LB" \
-    --vpc-id $VPC_ID \
-    --query GroupId --output text`
+## create security group for LoadBalancer
+GROUP_LB_ID=`aws ec2 create-security-group --group-name SecGroupForLB --description "Security group for LB" --vpc-id $VPC_ID --query GroupId --output text`
 
-# Configure the security group for LoadBalancer
+## configure the security group for loadbalancer
 aws ec2 authorize-security-group-ingress --group-id $GROUP_LB_ID --protocol tcp --port 80 --cidr 0.0.0.0/0 
 
-# Create LoadBalancer
-LB_ARN=`aws elbv2 create-load-balancer \
-    --name lb-broda \
-    --subnets $SUBNET_1_ID $SUBNET_2_ID \
-    --security-groups $GROUP_LB_ID \
+## create loadbalancer
+LB_ARN=`aws elbv2 create-load-balancer --name lb-broda --subnets $SUBNET_1_ID $SUBNET_2_ID --security-groups $GROUP_LB_ID \
     --query LoadBalancers[*].LoadBalancerArn --output text`
 
-sleep 15
-# Retrieve VPC IP Address
+
+## receive ip address of vpc
 VPC_NET=`aws ec2 describe-vpcs --query Vpcs[0].CidrBlock --output text`
 
-# Create security group for Instances
-GROUP_INC_ID=`aws ec2 create-security-group \
-    --group-name SecGroupForINC \
-    --description "Security group for Instances" \
-    --vpc-id $VPC_ID \
-    --query GroupId --output text`
+## security group for Instances
+GROUP_INC_ID=`aws ec2 create-security-group --group-name SecGroupForINC --description "Security group for Instances" --vpc-id $VPC_ID --query GroupId --output text`
 
-# Configure Security Group to allow incoming trafic only from Load Balancer
+## configure security group to allow receiving trafic from loadbalancer
 aws ec2 authorize-security-group-ingress --group-id $GROUP_INC_ID --protocol tcp --port 80 --cidr $VPC_NET
 aws ec2 authorize-security-group-ingress --group-id $GROUP_INC_ID --protocol tcp --port 22 --cidr 0.0.0.0/0
 
-sleep 15
 
-# Create a key pair and output to MyKeyPair.pem
+## create a key pair and sent output to .pem file
 aws ec2 create-key-pair --key-name KeyBroda --query 'KeyMaterial' --output text > ./KeyBroda.pem
 
-# Modify permissions
+## update permissions
 chmod 400 KeyBroda.pem
 
 sleep 30
 
-# Create Instances
-INSTANCE_1_ID=`aws ec2 run-instances \
-    --image-id ami-0b5eea76982371e91 \
-    --subnet-id $SUBNET_1_ID \
-    --count 1 \
-    --instance-type t2.micro \
-    --key-name KeyBroda \
-    --security-group-ids $GROUP_INC_ID \
-    --user-data file://user_script.sh \
-    --query Instances[0].InstanceId --output text`
+## create tow similar instances
+INSTANCE_1_ID=`aws ec2 run-instances --image-id ami-0b5eea76982371e91 --subnet-id $SUBNET_1_ID --count 1 --instance-type t2.micro --key-name KeyBroda \
+    --security-group-ids $GROUP_INC_ID --user-data file://user_script.sh --query Instances[0].InstanceId --output text`
 
-INSTANCE_2_ID=`aws ec2 run-instances \
-    --image-id ami-0b5eea76982371e91 \
-    --subnet-id $SUBNET_2_ID \
-    --count 1 \
-    --instance-type t2.micro \
-    --key-name KeyBroda \
-    --security-group-ids $GROUP_INC_ID \
-    --user-data file://user_script.sh \
-    --query Instances[0].InstanceId --output text`
+INSTANCE_2_ID=`aws ec2 run-instances --image-id ami-0b5eea76982371e91 --subnet-id $SUBNET_2_ID --count 1 \--instance-type t2.micro --key-name KeyBroda \
+    --security-group-ids $GROUP_INC_ID --user-data file://user_script.sh --query Instances[0].InstanceId --output text`
 
-# Create a Target Group
-TG_ARN=`aws elbv2 create-target-group \
-    --name TargetGroup \
-    --protocol HTTP \
-    --port 80 \
-    --vpc-id $VPC_ID \
-    --query 'TargetGroups[*].TargetGroupArn' --output text`
+## create a target-group
+TG_ARN=`aws elbv2 create-target-group --name TargetGroup --protocol HTTP --port 80 --vpc-id $VPC_ID --query 'TargetGroups[*].TargetGroupArn' --output text`
 
-# Sleep for 30 sec
+## 30 sec pause
 sleep 30
 
-# Register Targets
+## register targets
 aws elbv2 register-targets --target-group-arn $TG_ARN --targets Id=$INSTANCE_1_ID Id=$INSTANCE_2_ID
 
-# Create Listener
-aws elbv2 create-listener \
-    --load-balancer-arn $LB_ARN \
-    --protocol HTTP \
-    --port 80 \
-    --default-actions Type=forward,TargetGroupArn=$TG_ARN 
+## create listener acording to some tips
+aws elbv2 create-listener --load-balancer-arn $LB_ARN --protocol HTTP --port 80 --default-actions Type=forward,TargetGroupArn=$TG_ARN 
 
-# Create Autoscaling Group
-aws autoscaling create-auto-scaling-group \
-    --auto-scaling-group-name AutoScalingGroup \
-    --instance-id $INSTANCE_1_ID \
-    --min-size 2 \
-    --max-size 2 \
-    --target-group-arns $TG_ARN 
+## create asg
+aws autoscaling create-auto-scaling-group --auto-scaling-group-name AutoScalingGroup --instance-id $INSTANCE_1_ID --min-size 2 --max-size 2 --target-group-arns $TG_ARN 
 
-# Update health settings
-aws autoscaling update-auto-scaling-group \
-    --auto-scaling-group-name AutoScalingGroup \
-    --health-check-type ELB \
-    --health-check-grace-period 15 
+## update asg health settings
+aws autoscaling update-auto-scaling-group --auto-scaling-group-name AutoScalingGroup --health-check-type ELB --health-check-grace-period 15 
 
-# Retrieve LoadBalancer's DNS
+## receive loadbalancer's dns address
 LB_DNS=`aws elbv2 describe-load-balancers --query 'LoadBalancers[0].DNSName' --output text`
 
-# Check AutoScalingGroup
+## check autoscalinggroup
 aws autoscaling describe-auto-scaling-groups --auto-scaling-group-name AutoScalingGroup
 
-# Pring LoadBalancer DNS
+## print loadbalancer dns address
 echo $LB_DNS
 
 sleep 15
